@@ -21,7 +21,9 @@ library(ggplot2)
 Now, upload the file "Class_Motivation.csv" from the Assignment 3 Repository as a data frame called "K1""
 ```{r}
 
-K1 <- read.table(...)
+K1 <- data.frame(Class_Motivation)
+
+
 
 ```
 
@@ -39,6 +41,9 @@ K2 <- dplyr::select(K1, 2:6)
 
 It is important to think about the meaning of missing values when clustering. We could treat them as having meaning or we could remove those people who have them. Neither option is ideal. What problems do you foresee if we recode or remove these values? Write your answers below:
 
+#Hypothosis: If we recode the values, this may support in keeping all of the completed data available, but it will slightly skew any calculations we do upon the data, for example, if we turn N/A into the mean, then the clusters will change slighlty as well.
+
+#If we delete the rows with the N/A, then we lose some data and that will skew the mean and clusters as well. In a data set this small, this could be significant.
 
 
 We will remove people with missing values for this assignment, but keep in mind the issues that you have identified.
@@ -53,8 +58,7 @@ K3 <- na.omit(K2) #This command create a data frame with only those people with 
 Another pre-processing step used in K-means is to standardize the values so that they have the same range. We do this because we want to treat each week as equally important - if we do not standardise then the week with the largest range will have the greatest impact on which clusters are formed. We standardise the values by using the "scales()" command.
 
 ```{r}
-
-K3 <- scale(K3)
+K3 <-  scale(K3)
 
 ```
 
@@ -81,7 +85,7 @@ fit <- kmeans(K3, 2)
 
 fit$cluster
 
-#We can also attach these clusters to te original dataframe by using the "data.frame" command to create a new data frame called K4.
+#We can also attach these clusters to the original dataframe by using the "data.frame" command to create a new data frame called K4.
 
 K4 <- data.frame(K3, fit$cluster)
 
@@ -98,7 +102,7 @@ First lets use tidyr to convert from wide to long format.
 ```{r}
 
 K5 <- tidyr::gather(K4, "week", "motivation", 1:5)
-
+K5
 ```
 
 Now lets use dplyr to average our motivation values by week and by cluster.
@@ -107,6 +111,7 @@ Now lets use dplyr to average our motivation values by week and by cluster.
 
 K6 <- K5 %>% group_by(week, cluster)
 K6 <- summarise(K6, avg = mean(motivation))
+K6
 
 ```
 
@@ -127,6 +132,7 @@ Likewise, since "cluster" is not numeric but rather a categorical label we want 
 K6$week <- as.numeric(K6$week)
 
 K6$cluster <- as.factor(K6$cluster)
+K6
 
 ```
 
@@ -139,11 +145,12 @@ Now we can plot our line plot using the ggplot command, "ggplot()".
 
 ```{r}
 
-ggplot(K6, aes(week, avg, colour = cluster)) + geom_line() + xlab("Week") + ylab("Average Motivation")
+ggplot(K6, aes(week, avg, colour = cluster)) + geom_line() + ggtitle("STUDENT MOTIVATION RESULTS OVER 5 WEEKS") + xlab("Week") + ylab("Average Motivation")
 
 ```
 
 What patterns do you see in the plot?
+#students in cluster 1 start out with little motivation, and at week 3, their motivation increases drastically. In cluster 2, the opposite happens. They start out highly motivated and at week 3, they begin to lose motivation drastically.
 
 It would be useful to determine how many people are in each cluster. We can do this easily with dplyr.
 
@@ -160,9 +167,84 @@ Once you have done this, save both of your plots to the Assignment 5 file. Creat
 
 Now, try to do the same for the data [collected in class](https://tccolumbia.qualtrics.com/SE/?SID=SV_6RRqlSAM6lZWYQt). Create two groups of clusters, the answers to the questions and regions where people grew up. 
 
+#First Part of Part II - create a cluster of the answers to the questions.
+#1. convert data to data frame (K8)
+#2. omit names and select the rest of the columns, 3 to 12
+#3. convert column Cat and Gif to 1s and 2s: ifelse(df$column=="word",1,2)
+#3. standarize the range w/scale.
+
+```{r}
+K8 <- data.frame(HUDK4050_2017_Cluster_Survey)
+K9 <- dplyr::select(K8, 3:12)
+K9$cat <- ifelse(K9$cat=="Yes",1,2)
+K9$gif.jiff <- ifelse(K9$gif.jiff=="g-iff",1,2)
+Komit <- na.omit(K9)
+K9 <- scale(K9) 
+
+#4. create cluster - let's choose 2 clusters (for now :))
+#5. Attach these clusters to K9
+fit2<-kmeans(K9, 5)
+K10 <- data.frame(K9, fit2$cluster)
+```
+
+```{r}
+
+library(cluster)
+clusplot(K9, fit2$cluster, color=TRUE, labels=1, lines=0, main="Dr. Lang's Favorite Class Data Results")
+
+```
+```{r}
+#Second Part of Part II - Regions where people grew up
+#1. create K.regions data frame to isolate the regions
+#2. select the column for the city (for now, add state once it works :))
+#3. use ggmap & maps
+
+K.regions <- dplyr::select(K8, 15)
+library("ggmap", lib.loc="C:/Program Files/R/R-3.4.1/library")
+library("maps", lib.loc="C:/Program Files/R/R-3.4.1/library")
+
+#change United States to USA (this took FOREVER to figure out! Tried replace, rename)
+
+Countries <- ifelse(K.regions$country.grew=="United States","USA",
+                    ifelse(K.regions$country.grew=="China","China",
+                    ifelse(K.regions$country.grew=="Indonesia","Indonesia", 
+                    ifelse(K.regions$country.grew=="Taiwan","Taiwan","USA"))))
+
+DFC <- data.frame(Countries)
+
+# get countries latitude/longitude from Google Maps API
+LL <- geocode(as.character(DFC$Countries), output = "latlon")
+
+#Join the lat and lon to DFC
+DFC <- cbind(DFC,LL)
+
+```
+```{r}
+#visualize the world map.
+map("world")
+#map("world",projection = "sinusoidal")
+```
+```{r}
+
+DFC$Countries <- ifelse(DFC$Countries=="China",1,
+                 ifelse(DFC$Countries=="USA",2,
+                 ifelse(DFC$Countries=="Taiwan",3,4)))
+
+DFC <- DFC %>% group_by(lon, lat)
+fit3 <- kmeans(DFC, 4)
+KC <- data.frame(DFC, fit3$cluster)
+
+ggplot(DFC, aes(Countries, color = fit3$cluster)) + geom_jitter(width=2, height = 3) + ggtitle("Where Students Grew Up") + xlab("lat") + ylab("lon")
+```
+
 ##Part III
 
 Create a visualization that shows the overlap between the two groups of clusters you created in part III.
+
+```{r}
+DFGroup <- tidyr::gather(K9,)
+```
+
 
 Code Book:
 
